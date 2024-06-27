@@ -1,59 +1,64 @@
-import requests
-import datetime
+# data_manage.py
+
+import psycopg2
+from psycopg2.extras import execute_values
 import logging
-from Data_manage import connect_redshift, create_table, insert_data
 
-# Configuración del logging
-logging.basicConfig(
-    filename='applog.log',
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
+def connect_redshift(dbname, user, password, host, port):
+    try:
+        conn = psycopg2.connect(
+            dbname=dbname,
+            user=user,
+            password=password,
+            host=host,
+            port=port
+        )
+        logging.info("Conexión a Redshift establecida correctamente.")
+        return conn
+    except psycopg2.Error as e:
+        logging.error(f"Error al conectar con Redshift: {e}")
+        raise
 
-# Configuración de la API de PokeAPI
-api_url = 'https://pokeapi.co/api/v2/pokemon/1'
+def create_table(conn, table_name):
+    create_table_query = f"""
+    CREATE TABLE IF NOT EXISTS {table_name} (
+        id INT PRIMARY KEY,
+        name VARCHAR(50),
+        height INT,
+        weight INT,
+        base_experience INT,
+        ingestion_time TIMESTAMP
+    );
+    """
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(create_table_query)
+            conn.commit()
+        logging.info(f"Tabla '{table_name}' verificada/creada en Redshift.")
+    except psycopg2.Error as e:
+        logging.error(f"Error al crear/verificar la tabla en Redshift: {e}")
+        raise
 
-# Configuración de Redshift
-redshift_endpoint = 'data-engineer-cluster.cyhh5bfevlmn.us-east-1.redshift.amazonaws.com'
-redshift_db = 'data-engineer-database'
-redshift_user = 'acevedomikhail_lv_coderhouse'
-redshift_password = 'Bs1H2V5S4C'
-redshift_port = 5439
-
-try:
-    # Extracción de datos desde la API de PokeAPI
-    response = requests.get(api_url)
-    response.raise_for_status()
-    data = response.json()
-    logging.info(f"Datos extraídos de la API: {data}")
-
-    # Transformación de los datos
-    pokemon_data = {
-        'id': data['id'],
-        'name': data['name'],
-        'height': data['height'],
-        'weight': data['weight'],
-        'base_experience': data['base_experience'],
-        'ingestion_time': datetime.datetime.utcnow()
-    }
-    logging.info(f"Datos transformados: {pokemon_data}")
-
-    # Conexión a Redshift
-    conn = connect_redshift(redshift_db, redshift_user, redshift_password, redshift_endpoint, redshift_port)
-
-    # Creación de la tabla en Redshift si no existe
-    create_table(conn)
-
-    # Inserción de datos en Redshift
-    insert_data(conn, pokemon_data)
-
-except requests.exceptions.RequestException as e:
-    logging.error(f"Error al realizar la petición a la API: {e}")
-except psycopg2.Error as e:
-    logging.error(f"Error al interactuar con Redshift: {e}")
-except Exception as e:
-    logging.error(f"Ocurrió un error inesperado: {e}")
-finally:
-    if 'conn' in locals() and conn:
-        conn.close()
-        logging.info("Conexión a Redshift cerrada.")
+def insert_data(conn, data, table_name):
+    insert_query = f"""
+    INSERT INTO {table_name} (id, name, height, weight, base_experience, ingestion_time)
+    VALUES %s;
+    """
+    values = [
+        (
+            data['id'],
+            data['name'],
+            data['height'],
+            data['weight'],
+            data['base_experience'],
+            data['ingestion_time']
+        )
+    ]
+    try:
+        with conn.cursor() as cursor:
+            execute_values(cursor, insert_query, values)
+            conn.commit()
+        logging.info(f"Datos insertados en Redshift correctamente en tabla '{table_name}'.")
+    except psycopg2.Error as e:
+        logging.error(f"Error al insertar datos en Redshift: {e}")
+        raise

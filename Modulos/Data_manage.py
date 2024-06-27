@@ -1,3 +1,5 @@
+# data_manage.py
+
 import psycopg2
 from psycopg2.extras import execute_values
 import logging
@@ -17,9 +19,9 @@ def connect_redshift(dbname, user, password, host, port):
         logging.error(f"Error al conectar con Redshift: {e}")
         raise
 
-def create_table(conn):
-    create_table_query = """
-    CREATE TABLE IF NOT EXISTS poke_datos (
+def create_table(conn, table_name):
+    create_table_query = f"""
+    CREATE TABLE IF NOT EXISTS {table_name} (
         id INT PRIMARY KEY,
         name VARCHAR(50),
         height INT,
@@ -32,14 +34,14 @@ def create_table(conn):
         with conn.cursor() as cursor:
             cursor.execute(create_table_query)
             conn.commit()
-        logging.info("Tabla 'poke_datos' verificada/creada en Redshift.")
+        logging.info(f"Tabla '{table_name}' verificada/creada en Redshift.")
     except psycopg2.Error as e:
         logging.error(f"Error al crear/verificar la tabla en Redshift: {e}")
         raise
 
-def insert_data(conn, data):
-    insert_query = """
-    INSERT INTO poke_datos (id, name, height, weight, base_experience, ingestion_time)
+def insert_data(conn, data, table_name):
+    insert_query = f"""
+    INSERT INTO {table_name} (id, name, height, weight, base_experience, ingestion_time)
     VALUES %s;
     """
     values = [
@@ -56,7 +58,7 @@ def insert_data(conn, data):
         with conn.cursor() as cursor:
             execute_values(cursor, insert_query, values)
             conn.commit()
-        logging.info("Datos insertados en Redshift correctamente.")
+        logging.info(f"Datos insertados en Redshift correctamente en tabla '{table_name}'.")
     except psycopg2.Error as e:
         logging.error(f"Error al insertar datos en Redshift: {e}")
         raise
